@@ -54,6 +54,9 @@ class Matris(object):
         """
 
         self.next_tetromino = random.choice(list_of_tetrominoes)
+        self.hold_tetromino = None  # Initialize the hold piece
+        self.hold_used = False      # Track if hold has been used in current turn
+        self.surface_of_hold_tetromino = Surface((0, 0), pygame.SRCALPHA, 32)  # Surface for hold piece
         self.set_tetrominoes()
         self.tetromino_rotation = 0
         self.downwards_timer = 0
@@ -91,8 +94,36 @@ class Matris(object):
         self.tetromino_rotation = 0
         self.tetromino_block = self.block(self.current_tetromino.color)
         self.shadow_block = self.block(self.current_tetromino.color, shadow=True)
+        self.hold_used = False  # Reset hold usage for new piece
+        self.surface_of_hold_tetromino = self.construct_surface_of_hold_tetromino()  # Update hold piece surface
 
-    
+    def hold_piece(self):
+        """
+        Handles holding and swapping tetrominos
+        """
+        if self.hold_used:
+            return  # Cannot hold more than once per turn
+        self.hold_used = True
+
+        if self.hold_tetromino is None:
+            # Move current tetromino to hold and get a new one
+            self.hold_tetromino = self.current_tetromino
+            self.current_tetromino = self.next_tetromino
+            self.next_tetromino = random.choice(list_of_tetrominoes)
+            self.surface_of_next_tetromino = self.construct_surface_of_next_tetromino()
+        else:
+            # Swap current and hold tetrominos
+            self.current_tetromino, self.hold_tetromino = self.hold_tetromino, self.current_tetromino
+
+        # Reset position and rotation
+        self.tetromino_position = (0,4) if len(self.current_tetromino.shape) == 2 else (0,3)
+        self.tetromino_rotation = 0
+        self.tetromino_block = self.block(self.current_tetromino.color)
+        self.shadow_block = self.block(self.current_tetromino.color, shadow=True)
+
+        self.surface_of_hold_tetromino = self.construct_surface_of_hold_tetromino()  # Update hold piece surface
+
+        
     def hard_drop(self):
         """
         Instantly places tetrominos in the cells below
@@ -141,7 +172,8 @@ class Matris(object):
             elif pressed(pygame.K_RIGHT) or pressed(pygame.K_d):
                 self.request_movement('right')
                 self.movement_keys['right'] = 1
-
+            elif pressed(pygame.K_c):  # Hold piece when 'C' is pressed
+                self.hold_piece()
             elif unpressed(pygame.K_LEFT) or unpressed(pygame.K_a):
                 self.movement_keys['left'] = 0
                 self.movement_keys_timer = (-self.movement_keys_speed)*2
@@ -228,7 +260,7 @@ class Matris(object):
                     return False
 
         return position
-                    
+                        
 
     def request_rotation(self):
         """
@@ -422,6 +454,21 @@ class Matris(object):
                     surf.blit(self.block(self.next_tetromino.color), (x*BLOCKSIZE, y*BLOCKSIZE))
         return surf
 
+    def construct_surface_of_hold_tetromino(self):
+        """
+        Draws the image of the held tetromino
+        """
+        if self.hold_tetromino is None:
+            return Surface((0, 0), pygame.SRCALPHA, 32)
+        shape = self.hold_tetromino.shape
+        surf = Surface((len(shape)*BLOCKSIZE, len(shape)*BLOCKSIZE), pygame.SRCALPHA, 32)
+
+        for y in range(len(shape)):
+            for x in range(len(shape)):
+                if shape[y][x]:
+                    surf.blit(self.block(self.hold_tetromino.color), (x*BLOCKSIZE, y*BLOCKSIZE))
+        return surf
+
 class Game(object):
     def main(self, screen):
         """
@@ -447,14 +494,15 @@ class Game(object):
                     self.redraw()
             except GameOver:
                 return
-      
+  
 
     def redraw(self):
         """
         Redraws the information panel and next termoino panel
         """
         if not self.matris.paused:
-            self.blit_next_tetromino(self.matris.surface_of_next_tetromino)
+            self.blit_tetromino_area(self.matris.surface_of_next_tetromino, "Next", {'top': MATRIS_OFFSET, 'centerx': TRICKY_CENTERX + 30})
+            self.blit_tetromino_area(self.matris.surface_of_hold_tetromino, "Hold", {'top': MATRIS_OFFSET, 'centerx': TRICKY_CENTERX - 110})
             self.blit_info()
 
             self.matris.draw_surface()
@@ -505,22 +553,25 @@ class Game(object):
         screen.blit(area, area.get_rect(bottom=HEIGHT-MATRIS_OFFSET, centerx=TRICKY_CENTERX))
 
 
-    def blit_next_tetromino(self, tetromino_surf):
+    def blit_tetromino_area(self, tetromino_surf, label, position):
         """
-        Draws the next tetromino in a box to the side of the board
+        Draws a tetromino in a labeled box (used for 'Next' and 'Hold' pieces)
         """
         area = Surface((BLOCKSIZE*5, BLOCKSIZE*5))
         area.fill(BORDERCOLOR)
         area.fill(BGCOLOR, Rect(BORDERWIDTH, BORDERWIDTH, BLOCKSIZE*5-BORDERWIDTH*2, BLOCKSIZE*5-BORDERWIDTH*2))
 
+        font = pygame.font.Font(None, 30)
+        text = font.render(label, True, (255, 255, 255))
+        area.blit(text, (BORDERWIDTH, BORDERWIDTH))
+
         areasize = area.get_size()[0]
         tetromino_surf_size = tetromino_surf.get_size()[0]
-        # ^^ I'm assuming width and height are the same
 
-        center = areasize/2 - tetromino_surf_size/2
-        area.blit(tetromino_surf, (center, center))
+        center = areasize/2 - tetromino_surf_size/2 + BORDERWIDTH
+        area.blit(tetromino_surf, (center, center + 20))
 
-        screen.blit(area, area.get_rect(top=MATRIS_OFFSET, centerx=TRICKY_CENTERX))
+        screen.blit(area, area.get_rect(**position))
 
 class Menu(object):
     """
