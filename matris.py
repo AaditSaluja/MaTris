@@ -327,24 +327,6 @@ class Matris(object):
         """
         This method is called whenever the falling tetromino "dies". `self.matrix` is updated,
         the lines are counted and cleared, and a new tetromino is chosen.
-<<<<<<< Updated upstream
-        """
-        self.matrix = self.blend()
-
-        lines_cleared = self.remove_lines()
-        self.lines += lines_cleared
-
-        if lines_cleared:
-            if lines_cleared >= 4:
-                self.linescleared_sound.play()
-            self.score += 100 * (lines_cleared**2) * self.combo
-
-            if not self.played_highscorebeaten_sound and self.score > self.highscore:
-                if self.highscore != 0:
-                    self.highscorebeaten_sound.play()
-                self.played_highscorebeaten_sound = True
-
-=======
         Now uses compute_reward to determine score instead of the previous fixed scoring.
         """
         # Store the old state before locking the tetromino
@@ -379,17 +361,10 @@ class Matris(object):
             self.played_highscorebeaten_sound = True
 
         # Level up logic
->>>>>>> Stashed changes
         if self.lines >= self.level*10:
             self.levelup_sound.play()
             self.level += 1
 
-<<<<<<< Updated upstream
-        self.combo = self.combo + 1 if lines_cleared else 1
-
-        self.set_tetrominoes()
-
-=======
         # Combo logic remains the same
         self.combo = self.combo + 1 if lines_cleared else 1
 
@@ -397,7 +372,6 @@ class Matris(object):
         self.set_tetrominoes()
 
         # Game over check
->>>>>>> Stashed changes
         if not self.blend():
             self.gameover_sound.play()
             self.gameover()
@@ -469,16 +443,6 @@ class Matris(object):
                     surf.blit(self.block(self.next_tetromino.color), (x*BLOCKSIZE, y*BLOCKSIZE))
         return surf
 
-<<<<<<< Updated upstream
-class Game(object):
-    def main(self, screen):
-        """
-        Main loop for game
-        Redraws scores and next tetromino each time the loop is passed through
-        """
-        clock = pygame.time.Clock()
-
-=======
     def compute_reward(self, old_state, new_state):
         """
          Computes the reward using the CES-type reward function
@@ -573,7 +537,6 @@ class Game(object):
         """
         clock = pygame.time.Clock()
 
->>>>>>> Stashed changes
         self.matris = Matris()
         
         screen.blit(construct_nightmare(screen.get_size()), (0,0))
@@ -743,8 +706,4 @@ if __name__ == '__main__':
 
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("MaTris")
-<<<<<<< Updated upstream
     Menu().main(screen)
-=======
-    Menu().main(screen)
->>>>>>> Stashed changes
