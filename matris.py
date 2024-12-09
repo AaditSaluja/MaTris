@@ -327,6 +327,7 @@ class Matris(object):
         """
         This method is called whenever the falling tetromino "dies". `self.matrix` is updated,
         the lines are counted and cleared, and a new tetromino is chosen.
+<<<<<<< Updated upstream
         """
         self.matrix = self.blend()
 
@@ -343,20 +344,66 @@ class Matris(object):
                     self.highscorebeaten_sound.play()
                 self.played_highscorebeaten_sound = True
 
+=======
+        Now uses compute_reward to determine score instead of the previous fixed scoring.
+        """
+        # Store the old state before locking the tetromino
+        old_state = {
+            'lines': self.lines,
+            'score': self.score,
+            'level': self.level
+        }
+
+        # Lock the tetromino and update the matrix
+        self.matrix = self.blend()
+
+        # Remove lines and update lines count
+        lines_cleared = self.remove_lines()
+        self.lines += lines_cleared
+
+        # Prepare the new state
+        new_state = {
+            'lines': self.lines,
+            'score': self.score,
+            'level': self.level
+        }
+
+        # Compute reward and set it as the new score
+        reward = self.compute_reward(old_state, new_state)
+        self.score = max(0, int(reward))  # Ensure non-negative integer score
+
+        # Check and play high score related sounds
+        if not self.played_highscorebeaten_sound and self.score > self.highscore:
+            if self.highscore != 0:
+                self.highscorebeaten_sound.play()
+            self.played_highscorebeaten_sound = True
+
+        # Level up logic
+>>>>>>> Stashed changes
         if self.lines >= self.level*10:
             self.levelup_sound.play()
             self.level += 1
 
+<<<<<<< Updated upstream
         self.combo = self.combo + 1 if lines_cleared else 1
 
         self.set_tetrominoes()
 
+=======
+        # Combo logic remains the same
+        self.combo = self.combo + 1 if lines_cleared else 1
+
+        # Set up next tetromino
+        self.set_tetrominoes()
+
+        # Game over check
+>>>>>>> Stashed changes
         if not self.blend():
             self.gameover_sound.play()
             self.gameover()
             
         self.needs_redraw = True
-
+        
     def remove_lines(self):
         """
         Removes lines from the board
@@ -422,6 +469,7 @@ class Matris(object):
                     surf.blit(self.block(self.next_tetromino.color), (x*BLOCKSIZE, y*BLOCKSIZE))
         return surf
 
+<<<<<<< Updated upstream
 class Game(object):
     def main(self, screen):
         """
@@ -430,6 +478,102 @@ class Game(object):
         """
         clock = pygame.time.Clock()
 
+=======
+    def compute_reward(self, old_state, new_state):
+        """
+         Computes the reward using the CES-type reward function
+        """
+        # Extract the current state
+        lines_cleared = new_state['lines'] - old_state['lines']
+    
+        # Compute the number of holes
+        n_holes = self.count_holes()
+
+        # Compute the number of filled rows (10_fills)
+        n_10_fills = self.count_full_lines()
+
+        # Compute the height difference term (this assumes matrix is dict with keys as (y, x))
+        height_diff = self.compute_column_height_diff()
+
+        # Reward function constants (You can adjust these values)
+        alpha = 1.0
+        rho = 0.5
+        beta = 0.1
+        gamma = 0.05
+        delta = 0.01
+
+        # Compute the reward using the CES-type function
+        reward = (alpha * (100 * (lines_cleared)**2)**rho - 
+              beta * n_holes - 
+              gamma * n_10_fills + 
+              delta * height_diff)
+
+        return reward
+
+
+    def count_holes(self):
+        """
+        Counts the number of holes in the current matrix.
+        A hole is an empty space below a filled block in the same column.
+        """
+        n_holes = 0
+        for x in range(MATRIX_WIDTH):
+            column_filled = False
+            for y in range(MATRIX_HEIGHT):
+                if self.matrix[(y, x)] is not None:  # There's a block at (y, x)
+                    column_filled = True
+                elif column_filled:  # We found a hole
+                    n_holes += 1
+        return n_holes
+
+
+    def count_full_lines(self):
+        """
+        Counts the number of fully filled lines.
+        A line is full if all cells in that row are filled.
+        """
+        n_10_fills = 0
+        for y in range(MATRIX_HEIGHT):
+            if all(self.matrix[(y, x)] is not None for x in range(MATRIX_WIDTH)):
+                n_10_fills += 1
+        return n_10_fills
+
+
+    def compute_column_height_diff(self):
+        """
+        Computes the sum of the height differences between adjacent columns
+        and applies the condition to reward or penalize based on the difference.
+        """
+        height = [0] * MATRIX_WIDTH
+        
+        # Calculate the height of each column
+        for x in range(MATRIX_WIDTH):
+            for y in range(MATRIX_HEIGHT):
+                if self.matrix[(y, x)] is not None:
+                    height[x] = MATRIX_HEIGHT - y
+                    break
+        
+        # Compute the height differences
+        height_diff = 0
+        for i in range(MATRIX_WIDTH - 1):
+            diff = abs(height[i] - height[i + 1])
+            if 0 <= diff <= 2:  # Apply the condition
+                height_diff += 1
+            else:
+                height_diff -= 1
+        
+        return height_diff
+
+
+class Game(object):
+    def main(self, screen):
+        """
+        Main loop for game
+        Redraws scores and next tetromino each time the loop is passed through
+        """
+        clock = pygame.time.Clock()
+
+>>>>>>> Stashed changes
         self.matris = Matris()
         
         screen.blit(construct_nightmare(screen.get_size()), (0,0))
@@ -599,4 +743,8 @@ if __name__ == '__main__':
 
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("MaTris")
+<<<<<<< Updated upstream
     Menu().main(screen)
+=======
+    Menu().main(screen)
+>>>>>>> Stashed changes
