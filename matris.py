@@ -37,9 +37,14 @@ TRICKY_CENTERX = WIDTH-(WIDTH-(MATRIS_OFFSET+BLOCKSIZE*MATRIX_WIDTH+BORDERWIDTH*
 VISIBLE_MATRIX_HEIGHT = MATRIX_HEIGHT - 2
 
 class Matris(object):
-    def __init__(self):
-        self.surface = screen.subsurface(Rect((MATRIS_OFFSET+BORDERWIDTH, MATRIS_OFFSET+BORDERWIDTH),
-                                              (MATRIX_WIDTH * BLOCKSIZE, (MATRIX_HEIGHT-2) * BLOCKSIZE)))
+    def __init__(self, screen=None, render=True):
+        self.screen = screen
+        self.render = render
+        if self.render and self.screen:
+            self.surface = self.screen.subsurface(Rect((MATRIS_OFFSET+BORDERWIDTH, MATRIS_OFFSET+BORDERWIDTH),
+                                                  (MATRIX_WIDTH * BLOCKSIZE, (MATRIX_HEIGHT-2) * BLOCKSIZE)))
+        else:
+            self.surface = None
 
         self.matrix = dict()
         for y in range(MATRIX_HEIGHT):
@@ -136,7 +141,8 @@ class Matris(object):
                 self.gameover(full_exit=True)
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_p:
-                    self.surface.fill((0,0,0))
+                    if self.surface:
+                        self.surface.fill((0,0,0))
                     self.needs_redraw = True
                     self.paused = not self.paused
                 elif event.key == pygame.K_ESCAPE:
@@ -188,6 +194,9 @@ class Matris(object):
         """
         Draws the image of the current tetromino
         """
+        if not self.render or not self.surface:
+            return  # Skip rendering if not enabled
+
         with_tetromino = self.blend(matrix=self.place_shadow())
 
         for y in range(MATRIX_HEIGHT):
@@ -447,6 +456,9 @@ class Matris(object):
         """
         Draws the image of the next tetromino
         """
+        if not self.render:
+            return None
+
         shape = self.next_tetromino.shape
         surf = Surface((len(shape)*BLOCKSIZE, len(shape)*BLOCKSIZE), pygame.SRCALPHA, 32)
 
@@ -460,6 +472,9 @@ class Matris(object):
         """
         Draws the image of the hold tetromino
         """
+        if not self.render:
+            return None
+
         if self.hold_tetromino is None:
             return Surface((0, 0), pygame.SRCALPHA, 32)
         shape = self.hold_tetromino.shape
@@ -568,48 +583,77 @@ class Matris(object):
         return height_diff
 
 class Game(object):
-    def main(self, screen):
+    def __init__(self, render=True):
+        self.render = render
+        if self.render:
+            pygame.init()
+            self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+            pygame.display.set_caption("MaTris")
+            self.screen.blit(construct_nightmare(self.screen.get_size()), (0,0))
+            matris_border = Surface((MATRIX_WIDTH*BLOCKSIZE+BORDERWIDTH*2, VISIBLE_MATRIX_HEIGHT*BLOCKSIZE+BORDERWIDTH*2))
+            matris_border.fill(BORDERCOLOR)
+            self.screen.blit(matris_border, (MATRIS_OFFSET,MATRIS_OFFSET))
+        else:
+            self.screen = None
+        self.matris = Matris(screen=self.screen, render=self.render)
+        self.clock = pygame.time.Clock()
+        self.running = True
+
+    def main(self):
         """
         Main loop for game
         Redraws scores and next tetromino each time the loop is passed through
         """
-        clock = pygame.time.Clock()
+        if self.render:
+            self.redraw()
 
-        self.matris = Matris()
-
-        screen.blit(construct_nightmare(screen.get_size()), (0,0))
-
-        matris_border = Surface((MATRIX_WIDTH*BLOCKSIZE+BORDERWIDTH*2, VISIBLE_MATRIX_HEIGHT*BLOCKSIZE+BORDERWIDTH*2))
-        matris_border.fill(BORDERCOLOR)
-        screen.blit(matris_border, (MATRIS_OFFSET,MATRIS_OFFSET))
-
-        self.redraw()
-
-        while True:
+        while self.running:
             try:
-                timepassed = clock.tick(50)
+                timepassed = self.clock.tick(50)
                 if self.matris.update((timepassed / 1000.) if not self.matris.paused else 0):
-                    self.redraw()
+                    if self.render:
+                        self.redraw()
             except GameOver:
-                return
+                self.running = False
+
+        if self.render:
+            pygame.quit()
+
+    def step(self, action_key):
+        # Post the action as a pygame event
+        pygame.event.post(pygame.event.Event(pygame.KEYDOWN, {'key': action_key}))
+        try:
+            if self.matris.update(0.02):
+                if self.render:
+                    self.redraw()
+            done = False
+        except GameOver:
+            done = True
+        # Get the reward from the matris object
+        reward = self.matris.reward
+        score = self.matris.score
+        return done, reward, score
 
     def redraw(self):
         """
         Redraws the information panel and next tetromino panel
         """
-        if not self.matris.paused:
+        if not self.matris.paused and self.render:
             self.blit_tetromino_area(self.matris.surface_of_next_tetromino, "Next", {'top': MATRIS_OFFSET, 'centerx': TRICKY_CENTERX + 30})
             self.blit_tetromino_area(self.matris.surface_of_hold_tetromino, "Hold", {'top': MATRIS_OFFSET, 'centerx': TRICKY_CENTERX - 110})
             self.blit_info()
 
             self.matris.draw_surface()
 
-        pygame.display.flip()
+            pygame.display.flip()
 
     def blit_info(self):
         """
         Draws information panel
         """
+        if not self.render:
+            return
+
         textcolor = (255, 255, 255)
         font = pygame.font.Font(None, 30)
         width = (WIDTH-(MATRIS_OFFSET+BLOCKSIZE*MATRIX_WIDTH+BORDERWIDTH*2)) - MATRIS_OFFSET*2
@@ -649,12 +693,15 @@ class Game(object):
         area.blit(linessurf, (0, levelsurf.get_rect().height + scoresurf.get_rect().height + rewardsurf.get_rect().height))
         area.blit(combosurf, (0, levelsurf.get_rect().height + scoresurf.get_rect().height + rewardsurf.get_rect().height + linessurf.get_rect().height))
 
-        screen.blit(area, area.get_rect(bottom=HEIGHT-MATRIS_OFFSET, centerx=TRICKY_CENTERX))
+        self.screen.blit(area, area.get_rect(bottom=HEIGHT-MATRIS_OFFSET, centerx=TRICKY_CENTERX))
 
     def blit_tetromino_area(self, tetromino_surf, label, position):
         """
         Draws the tetromino (Next or Hold) in a box to the side of the board
         """
+        if not self.render or tetromino_surf is None:
+            return
+
         area = Surface((BLOCKSIZE*5, BLOCKSIZE*5))
         area.fill(BORDERCOLOR)
         area.fill(BGCOLOR, Rect(BORDERWIDTH, BORDERWIDTH, BLOCKSIZE*5-BORDERWIDTH*2, BLOCKSIZE*5-BORDERWIDTH*2))
@@ -668,17 +715,20 @@ class Game(object):
 
         center = areasize/2 - tetromino_surf_size/2 + BORDERWIDTH
         area.blit(tetromino_surf, (center, center+20))
-        screen.blit(area, area.get_rect(**position))
+        self.screen.blit(area, area.get_rect(**position))
 
 class Menu(object):
     """
     Creates main menu
     """
     running = True
-    def main(self, screen):
+    def main(self):
+        pygame.init()
+        screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        pygame.display.set_caption("MaTris")
         clock = pygame.time.Clock()
         menu = kezmenu.KezMenu(
-            ['Play!', lambda: Game().main(screen)],
+            ['Play!', lambda: Game(render=True).main()],
             ['Quit', lambda: setattr(self, 'running', False)],
         )
         menu.position = (50, 50)
@@ -742,8 +792,4 @@ def construct_nightmare(size):
     return surf
 
 if __name__ == '__main__':
-    pygame.init()
-
-    screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("MaTris")
-    Menu().main(screen)
+    Menu().main()
