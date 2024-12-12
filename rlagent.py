@@ -22,7 +22,7 @@ STATE_SIZE = MATRIX_WIDTH + 4  # Heights + aggregate_height + num_holes + bumpin
 ACTION_SIZE = len(ACTIONS)
 BATCH_SIZE = 64
 GAMMA = 0.99
-LR = 0.001
+LR = 0.0001
 MEMORY_SIZE = 10000
 TARGET_UPDATE = 10
 
@@ -102,10 +102,55 @@ class Agent:
         loss.backward()
         self.optimizer.step()
 
-def run_training(episodes=1000, render=False):
+# def run_training(episodes=1000, render=False):
+#     pygame.init()
+#     env = Game(render=render)
+#     agent = Agent()
+
+#     for ep in range(episodes):
+#         env.reset()
+#         state = env.matris.get_state_features()
+#         total_reward = 0
+#         done = False
+
+#         while not done:
+#             # Select and perform an action
+#             action = agent.select_action(state)
+#             next_state, reward, done, score = env.step(action)
+#             total_reward += reward;
+
+#             # Store the transition in memory
+#             agent.store_transition(state, action, reward, next_state, done)
+
+#             # Move to the next state
+#             state = next_state
+
+#             # Perform one step of the optimization
+#             agent.optimize_model()
+
+#         # Update the target network
+#         if ep % TARGET_UPDATE == 0:
+#             agent.target_net.load_state_dict(agent.policy_net.state_dict())
+
+#         # Decay epsilon
+#         agent.epsilon = max(0.1, agent.epsilon * 0.995)
+
+#         print(f"Episode {ep+1}/{episodes}, Score: {score}, Total Reward: {total_reward}")
+
+#     pygame.quit()
+#     # Optional: Save the trained model
+#     torch.save(agent.policy_net.state_dict(), "tetris_dqn.pth")
+
+def run_training(episodes=1000, render=False, load_path=None):
     pygame.init()
     env = Game(render=render)
     agent = Agent()
+
+    # If a load_path is provided, load the saved model
+    if load_path is not None:
+        agent.policy_net.load_state_dict(torch.load(load_path, map_location=device))
+        agent.target_net.load_state_dict(agent.policy_net.state_dict())
+        print(f"Loaded existing model from {load_path}")
 
     for ep in range(episodes):
         env.reset()
@@ -117,7 +162,7 @@ def run_training(episodes=1000, render=False):
             # Select and perform an action
             action = agent.select_action(state)
             next_state, reward, done, score = env.step(action)
-            total_reward += reward;
+            total_reward += reward
 
             # Store the transition in memory
             agent.store_transition(state, action, reward, next_state, done)
@@ -133,13 +178,15 @@ def run_training(episodes=1000, render=False):
             agent.target_net.load_state_dict(agent.policy_net.state_dict())
 
         # Decay epsilon
-        agent.epsilon = max(0.1, agent.epsilon * 0.995)
+        agent.epsilon = max(0.1, agent.epsilon * 0.999)
 
         print(f"Episode {ep+1}/{episodes}, Score: {score}, Total Reward: {total_reward}")
 
     pygame.quit()
-    # Optional: Save the trained model
-    torch.save(agent.policy_net.state_dict(), "tetris_dqn.pth")
+
+    # Optional: Save the trained model again after further training
+    torch.save(agent.policy_net.state_dict(), "tetris_dqn_950.pth")
+
 
 if __name__ == '__main__':
-    run_training(episodes=1000, render=True)
+    run_training(episodes=2000, render=True)

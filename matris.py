@@ -405,6 +405,11 @@ class Matris(object):
 
         # Game over check after setting new tetromino
         if not self.blend():
+            game_over_penalty = -max(0, 1000 - 0.0001*self.num_updates)  
+            self.reward += game_over_penalty
+            self.total_rewards += game_over_penalty
+            self.num_updates += 1
+            self.update_average_reward()
             self.gameover_sound.play()
             self.gameover()
 
@@ -510,30 +515,80 @@ class Matris(object):
         position = (posY - 1, posX)
         return self.blend(position=position, shadow=True)
 
+    # def compute_reward(self, old_state, new_state):
+    #     lines_cleared = new_state['lines_cleared']
+    #     holes_after = self.count_holes()
+    #     heights = self.get_column_heights()
+    #     max_height = max(heights)  # Maximum stack height
+
+    #     # Define reward constants
+    #     line_clear_reward = 100   # Basic reward for clearing each line
+    #     tetris_bonus = 800        # Large bonus for clearing four lines at once
+    #     hole_penalty = -50        # Penalty for each hole created
+    #     height_penalty = -100      # Penalty for increased stack height, to encourage low plays
+    #     score_fraction = 100     # Fraction of the game score to include in the reward
+
+    #     # Calculate dynamic rewards
+    #     reward = (line_clear_reward * lines_cleared +
+    #             tetris_bonus * (1 if lines_cleared == 4 else 0) +  # Apply Tetris bonus only for 4 lines
+    #             hole_penalty * holes_after +
+    #             height_penalty * max_height +
+    #             score_fraction * self.score)  # Include a fraction of the score in the reward
+
+    #     # Normalize the reward by the number of blocks played to avoid rewarding just longer play
+    #     reward /= (self.num_blocks_played if self.num_blocks_played > 0 else 1)
+
+    #     return reward
+
     def compute_reward(self, old_state, new_state):
         lines_cleared = new_state['lines_cleared']
         holes_after = self.count_holes()
         heights = self.get_column_heights()
-        max_height = max(heights)  # Maximum stack height
+        # n_10_fills: number of filled cells in the 10th column (index 9 since zero-based)
+        n_10_fills = self.count_fills_in_column(9)
 
-        # Define reward constants
-        line_clear_reward = 100   # Basic reward for clearing each line
-        tetris_bonus = 800        # Large bonus for clearing four lines at once
-        hole_penalty = -50        # Penalty for each hole created
-        height_penalty = -10      # Penalty for increased stack height, to encourage low plays
-        score_fraction = 100     # Fraction of the game score to include in the reward
+        # *** NEW CODE STARTS HERE ***
+        # Define the CES-based reward parameters (scaling constants)
+        alpha = 1.0  # Adjust as needed
+        beta = 1.0   # Adjust as needed
+        gamma = 10.0  # Adjust as needed
+        delta = 25  # Adjust as needed
+        rho = 0.9    # Elasticity parameter, adjust as needed
 
-        # Calculate dynamic rewards
-        reward = (line_clear_reward * lines_cleared +
-                tetris_bonus * (1 if lines_cleared == 4 else 0) +  # Apply Tetris bonus only for 4 lines
-                hole_penalty * holes_after +
-                height_penalty * max_height +
-                score_fraction * self.score)  # Include a fraction of the score in the reward
+        tetris_bonus = 800 
 
-        # Normalize the reward by the number of blocks played to avoid rewarding just longer play
-        reward /= (self.num_blocks_played if self.num_blocks_played > 0 else 1)
+        # According to the given formula:
+        # R_t = (α * (100 * (lines_cleared)^2)^ρ) - β * (n_holes) - γ * (n_10_fills) 
+        #       + δ * ( Σ_{i=1 to 9} ( (height_i - height_{i+1} ≥ 0 && height_i - height_{i+1} ≤ 2) ? 1 : -1 ) )
+        #
+        # Note: In zero-based indexing, columns are heights[0] ... heights[9].
+        # i=1 to 9 translates to i=0 to 8 in zero-based indexing for Python.
+        bump_sum = 0
+        for i in range(9):
+            diff = heights[i] - heights[i+1]
+            if diff >= 0 and diff <= 2:
+                bump_sum += 1
+            else:
+                bump_sum -= 1
+
+        # Compute the CES-like term for lines cleared
+        # lines_cleared term: (100 * (lines_cleared)^2)
+        # Then raised to the power ρ
+        line_term = (100 * lines_cleared + tetris_bonus * (1 if lines_cleared == 4 else 0))
+        
+        # print((alpha * line_term), (beta * holes_after), (gamma * n_10_fills), (delta * bump_sum))
+
+        # Combine all into the reward function
+        reward = (alpha * line_term) - (beta * holes_after) - (gamma * n_10_fills) + (delta * bump_sum)
+        # *** NEW CODE ENDS HERE ***
+
+        # Optional: If you still want to normalize or incorporate other adjustments, do so here.
+        # For instance, we can divide by num_blocks_played to avoid overly large rewards.
+        if self.num_blocks_played > 0:
+            reward /= self.num_blocks_played
 
         return reward
+
 
 
     def compute_contiguity_reward(self):
@@ -555,18 +610,46 @@ class Matris(object):
             reward += (max_contiguity ** 2) * row_weight
         return reward
 
+    # def count_holes(self):
+    #     """
+    #     Count the number of 'holes' in the stack. A hole is defined as an empty space below at least one block.
+    #     """
+    #     holes = 0
+    #     for x in range(MATRIX_WIDTH):
+    #         block_found = False
+    #         for y in range(MATRIX_HEIGHT):
+    #             if self.matrix[(y, x)] is not None:
+    #                 block_found = True
+    #             elif block_found:
+    #                 holes += 1
+    #     return holes
     def count_holes(self):
-        """
-        Count the number of 'holes' in the stack. A hole is defined as an empty space below at least one block.
-        """
+        width = MATRIX_WIDTH
+        height = MATRIX_HEIGHT
+        
+        # Create a 2D array indicating which cells are filled/empty
+        empty_grid = [[self.matrix[(y, x)] is None for x in range(width)] for y in range(height)]
+        reachable = [[False]*width for _ in range(height)]
+
+        # Mark top row empty cells as reachable
+        for x in range(width):
+            if empty_grid[0][x]:
+                reachable[0][x] = True
+
+        # Propagate reachability downwards
+        for y in range(height - 1):
+            for x in range(width):
+                if reachable[y][x] and empty_grid[y+1][x]:
+                    # If the cell below is empty, it's reachable
+                    reachable[y+1][x] = True
+
+        # Count holes as empty cells that are not reachable
         holes = 0
-        for x in range(MATRIX_WIDTH):
-            block_found = False
-            for y in range(MATRIX_HEIGHT):
-                if self.matrix[(y, x)] is not None:
-                    block_found = True
-                elif block_found:
+        for y in range(height):
+            for x in range(width):
+                if empty_grid[y][x] and not reachable[y][x]:
                     holes += 1
+
         return holes
 
     def get_column_heights(self):
