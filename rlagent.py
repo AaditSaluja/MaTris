@@ -178,9 +178,9 @@ def run_training(episodes=1000, render=False, load_path=None):
             agent.target_net.load_state_dict(agent.policy_net.state_dict())
 
         # Decay epsilon
-        agent.epsilon = max(0.1, agent.epsilon * 0.999)
+        agent.epsilon = max(0.1, agent.epsilon * 0.9995)
 
-        print(f"Episode {ep+1}/{episodes}, Score: {score}, Total Reward: {total_reward}")
+        print(f"Episode {ep+1}/{episodes}, Score: {score}, Total Reward: {total_reward}", flush=True)
 
     pygame.quit()
 
@@ -189,4 +189,4 @@ def run_training(episodes=1000, render=False, load_path=None):
 
 
 if __name__ == '__main__':
-    run_training(episodes=2000, render=True)
+    run_training(episodes=4000, render=False)

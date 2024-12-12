@@ -14,7 +14,8 @@ class GameOver(Exception):
     """Exception used for its control flow properties"""
 
 def get_sound(filename):
-    return pygame.mixer.Sound(os.path.join(os.path.dirname(__file__), "resources", filename))
+    return
+    # return pygame.mixer.Sound(os.path.join(os.path.dirname(__file__), "resources", filename))
 
 BGCOLOR = (15, 15, 20)
 BORDERCOLOR = (140, 140, 140)
@@ -75,10 +76,10 @@ class Matris(object):
         self.highscore = load_score()
         self.played_highscorebeaten_sound = False
 
-        self.levelup_sound  = get_sound("levelup.wav")
-        self.gameover_sound = get_sound("gameover.wav")
-        self.linescleared_sound = get_sound("linecleared.wav")
-        self.highscorebeaten_sound = get_sound("highscorebeaten.wav")
+        # self.levelup_sound  = get_sound("levelup.wav")
+        # self.gameover_sound = get_sound("gameover.wav")
+        # self.linescleared_sound = get_sound("linecleared.wav")
+        # self.highscorebeaten_sound = get_sound("highscorebeaten.wav")
 
         self.reward = 0  # Initialize reward to display alongside score
         self.num_blocks_played = 0
@@ -337,22 +338,93 @@ class Matris(object):
 
         return border
 
+    # def lock_tetromino(self):
+    #     """
+    #     This method is called whenever the falling tetromino "dies". `self.matrix` is updated,
+    #     the lines are counted and cleared, and a new tetromino is chosen.
+    #     Scoring is implemented as in the second code version.
+    #     """
+    #     # Increment the number of blocks played each time a tetromino is locked
+    #     self.num_blocks_played += 1
+
+    #     # Store the old state before locking the tetromino
+    #     old_state = {
+    #         'lines': self.lines,
+    #         'score': self.score,
+    #         'level': self.level,
+    #         'holes': self.count_holes()  # Capture the number of holes before the new block is placed
+    #     }
+
+    #     # Lock the tetromino and update the matrix
+    #     blended_matrix = self.blend()
+    #     if blended_matrix:
+    #         self.matrix = blended_matrix
+    #     else:
+    #         self.gameover_sound.play()
+    #         self.gameover()
+
+    #     # Remove lines and update lines count
+    #     lines_cleared = self.remove_lines()
+    #     self.lines += lines_cleared
+
+    #     # Implement scoring as before
+    #     if lines_cleared:
+    #         if lines_cleared >= 4:
+    #             self.linescleared_sound.play()
+    #         self.score += 100 * (lines_cleared ** 2) * self.combo
+
+    #         # Check and play high score related sounds
+    #         if not self.played_highscorebeaten_sound and self.score > self.highscore:
+    #             if self.highscore != 0:
+    #                 self.highscorebeaten_sound.play()
+    #             self.played_highscorebeaten_sound = True
+
+    #     # Level up logic
+    #     if self.lines >= self.level * 10:
+    #         self.levelup_sound.play()
+    #         self.level += 1
+
+    #     # Combo logic remains the same
+    #     self.combo = self.combo + 1 if lines_cleared else 1
+
+    #     # Compute the reward using compute_reward (but don't use it for scoring)
+    #     new_state = {
+    #         'lines': self.lines,
+    #         'score': self.score,
+    #         'level': self.level,
+    #         'lines_cleared': lines_cleared
+    #     }
+    #     self.reward = self.compute_reward(old_state, new_state)
+
+    #     # Update cumulative rewards for average calculation
+    #     self.total_rewards += self.reward
+    #     self.num_updates += 1
+    #     self.update_average_reward()
+
+    #     # Set up next tetromino
+    #     self.set_tetrominoes()
+
+    #     # Game over check after setting new tetromino
+    #     if not self.blend():
+    #         game_over_penalty = -max(0, 1000 - 0.0001*self.num_updates)  
+    #         self.reward += game_over_penalty
+    #         self.total_rewards += game_over_penalty
+    #         self.num_updates += 1
+    #         self.update_average_reward()
+    #         self.gameover_sound.play()
+    #         self.gameover()
+
+    #     self.needs_redraw = True
     def lock_tetromino(self):
         """
         This method is called whenever the falling tetromino "dies". `self.matrix` is updated,
         the lines are counted and cleared, and a new tetromino is chosen.
-        Scoring is implemented as in the second code version.
         """
         # Increment the number of blocks played each time a tetromino is locked
         self.num_blocks_played += 1
 
-        # Store the old state before locking the tetromino
-        old_state = {
-            'lines': self.lines,
-            'score': self.score,
-            'level': self.level,
-            'holes': self.count_holes()  # Capture the number of holes before the new block is placed
-        }
+        # Store the old score before locking the tetromino
+        old_score = self.score
 
         # Lock the tetromino and update the matrix
         blended_matrix = self.blend()
@@ -373,10 +445,10 @@ class Matris(object):
             self.score += 100 * (lines_cleared ** 2) * self.combo
 
             # Check and play high score related sounds
-            if not self.played_highscorebeaten_sound and self.score > self.highscore:
-                if self.highscore != 0:
-                    self.highscorebeaten_sound.play()
-                self.played_highscorebeaten_sound = True
+            # if not self.played_highscorebeaten_sound and self.score > self.highscore:
+            #     if self.highscore != 0:
+            #         self.highscorebeaten_sound.play()
+            #     self.played_highscorebeaten_sound = True
 
         # Level up logic
         if self.lines >= self.level * 10:
@@ -386,14 +458,8 @@ class Matris(object):
         # Combo logic remains the same
         self.combo = self.combo + 1 if lines_cleared else 1
 
-        # Compute the reward using compute_reward (but don't use it for scoring)
-        new_state = {
-            'lines': self.lines,
-            'score': self.score,
-            'level': self.level,
-            'lines_cleared': lines_cleared
-        }
-        self.reward = self.compute_reward(old_state, new_state)
+        # Reward is now simply the increase in score
+        self.reward = self.score - old_score
 
         # Update cumulative rewards for average calculation
         self.total_rewards += self.reward
@@ -405,7 +471,7 @@ class Matris(object):
 
         # Game over check after setting new tetromino
         if not self.blend():
-            game_over_penalty = -max(0, 1000 - 0.0001*self.num_updates)  
+            game_over_penalty = -max(0, 10000 - 0.0001*self.num_updates)  
             self.reward += game_over_penalty
             self.total_rewards += game_over_penalty
             self.num_updates += 1
@@ -414,6 +480,7 @@ class Matris(object):
             self.gameover()
 
         self.needs_redraw = True
+
 
     def update_average_reward(self):
         # Update the average reward and its rate of change
@@ -540,54 +607,54 @@ class Matris(object):
 
     #     return reward
 
-    def compute_reward(self, old_state, new_state):
-        lines_cleared = new_state['lines_cleared']
-        holes_after = self.count_holes()
-        heights = self.get_column_heights()
-        # n_10_fills: number of filled cells in the 10th column (index 9 since zero-based)
-        n_10_fills = self.count_fills_in_column(9)
+    # def compute_reward(self, old_state, new_state):
+    #     lines_cleared = new_state['lines_cleared']
+    #     holes_after = self.count_holes()
+    #     heights = self.get_column_heights()
+    #     # n_10_fills: number of filled cells in the 10th column (index 9 since zero-based)
+    #     n_10_fills = self.count_fills_in_column(9)
 
-        # *** NEW CODE STARTS HERE ***
-        # Define the CES-based reward parameters (scaling constants)
-        alpha = 1.0  # Adjust as needed
-        beta = 1.0   # Adjust as needed
-        gamma = 10.0  # Adjust as needed
-        delta = 25  # Adjust as needed
-        rho = 0.9    # Elasticity parameter, adjust as needed
+    #     # *** NEW CODE STARTS HERE ***
+    #     # Define the CES-based reward parameters (scaling constants)
+    #     alpha = 1.0  # Adjust as needed
+    #     beta = 1.0   # Adjust as needed
+    #     gamma = 10.0  # Adjust as needed
+    #     delta = 25  # Adjust as needed
+    #     rho = 0.9    # Elasticity parameter, adjust as needed
 
-        tetris_bonus = 800 
+    #     tetris_bonus = 800 
 
-        # According to the given formula:
-        # R_t = (α * (100 * (lines_cleared)^2)^ρ) - β * (n_holes) - γ * (n_10_fills) 
-        #       + δ * ( Σ_{i=1 to 9} ( (height_i - height_{i+1} ≥ 0 && height_i - height_{i+1} ≤ 2) ? 1 : -1 ) )
-        #
-        # Note: In zero-based indexing, columns are heights[0] ... heights[9].
-        # i=1 to 9 translates to i=0 to 8 in zero-based indexing for Python.
-        bump_sum = 0
-        for i in range(9):
-            diff = heights[i] - heights[i+1]
-            if diff >= 0 and diff <= 2:
-                bump_sum += 1
-            else:
-                bump_sum -= 1
+    #     # According to the given formula:
+    #     # R_t = (α * (100 * (lines_cleared)^2)^ρ) - β * (n_holes) - γ * (n_10_fills) 
+    #     #       + δ * ( Σ_{i=1 to 9} ( (height_i - height_{i+1} ≥ 0 && height_i - height_{i+1} ≤ 2) ? 1 : -1 ) )
+    #     #
+    #     # Note: In zero-based indexing, columns are heights[0] ... heights[9].
+    #     # i=1 to 9 translates to i=0 to 8 in zero-based indexing for Python.
+    #     bump_sum = 0
+    #     for i in range(9):
+    #         diff = heights[i] - heights[i+1]
+    #         if diff >= 0 and diff <= 2:
+    #             bump_sum += 1
+    #         else:
+    #             bump_sum -= 1
 
-        # Compute the CES-like term for lines cleared
-        # lines_cleared term: (100 * (lines_cleared)^2)
-        # Then raised to the power ρ
-        line_term = (100 * lines_cleared + tetris_bonus * (1 if lines_cleared == 4 else 0))
+    #     # Compute the CES-like term for lines cleared
+    #     # lines_cleared term: (100 * (lines_cleared)^2)
+    #     # Then raised to the power ρ
+    #     line_term = (100 * lines_cleared + tetris_bonus * (1 if lines_cleared == 4 else 0))
         
-        # print((alpha * line_term), (beta * holes_after), (gamma * n_10_fills), (delta * bump_sum))
+    #     # print((alpha * line_term), (beta * holes_after), (gamma * n_10_fills), (delta * bump_sum))
 
-        # Combine all into the reward function
-        reward = (alpha * line_term) - (beta * holes_after) - (gamma * n_10_fills) + (delta * bump_sum)
-        # *** NEW CODE ENDS HERE ***
+    #     # Combine all into the reward function
+    #     reward = (alpha * line_term) - (beta * holes_after) - (gamma * n_10_fills) + (delta * bump_sum)
+    #     # *** NEW CODE ENDS HERE ***
 
-        # Optional: If you still want to normalize or incorporate other adjustments, do so here.
-        # For instance, we can divide by num_blocks_played to avoid overly large rewards.
-        if self.num_blocks_played > 0:
-            reward /= self.num_blocks_played
+    #     # Optional: If you still want to normalize or incorporate other adjustments, do so here.
+    #     # For instance, we can divide by num_blocks_played to avoid overly large rewards.
+    #     if self.num_blocks_played > 0:
+    #         reward /= self.num_blocks_played
 
-        return reward
+    #     return reward
 
 
 
