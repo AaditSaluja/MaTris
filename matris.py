@@ -4,6 +4,7 @@ from pygame import Rect, Surface
 import random
 import os
 import kezmenu
+import numpy as np
 
 from tetrominoes import list_of_tetrominoes
 from tetrominoes import rotate
@@ -80,6 +81,7 @@ class Matris(object):
         self.highscorebeaten_sound = get_sound("highscorebeaten.wav")
 
         self.reward = 0  # Initialize reward to display alongside score
+        self.lines_cleared_last = 0  # Number of lines cleared in the last move
 
     def set_tetrominoes(self):
         """
@@ -294,8 +296,8 @@ class Matris(object):
             self.tetromino_position = (posY-1, posX)
             return self.tetromino_position
         elif direction == 'down' and self.blend(position=(posY+1, posX)):
-            self.needs_redraw = True
             self.tetromino_position = (posY+1, posX)
+            self.needs_redraw = True
             return self.tetromino_position
         else:
             return False
@@ -355,13 +357,18 @@ class Matris(object):
         }
 
         # Lock the tetromino and update the matrix
-        self.matrix = self.blend()
+        blended_matrix = self.blend()
+        if blended_matrix:
+            self.matrix = blended_matrix
+        else:
+            self.gameover_sound.play()
+            self.gameover()
 
         # Remove lines and update lines count
         lines_cleared = self.remove_lines()
         self.lines += lines_cleared
 
-        # Implement scoring as in the second code
+        # Implement scoring as before
         if lines_cleared:
             if lines_cleared >= 4:
                 self.linescleared_sound.play()
@@ -393,7 +400,7 @@ class Matris(object):
         # Set up next tetromino
         self.set_tetrominoes()
 
-        # Game over check
+        # Game over check after setting new tetromino
         if not self.blend():
             self.gameover_sound.play()
             self.gameover()
@@ -402,7 +409,7 @@ class Matris(object):
 
     def remove_lines(self):
         """
-        Removes lines from the board
+        Removes lines from the board and counts the number of lines cleared.
         """
         lines = []
         for y in range(MATRIX_HEIGHT):
@@ -421,6 +428,9 @@ class Matris(object):
             for y in range(line, 0, -1):
                 for x in range(MATRIX_WIDTH):
                     self.matrix[(y,x)] = self.matrix.get((y-1,x), None)
+
+        # Update lines_cleared_last
+        self.lines_cleared_last = len(lines)
 
         return len(lines)
 
@@ -500,7 +510,7 @@ class Matris(object):
     # Updated Reward function and related methods
     def compute_reward(self, old_state, new_state):
         """
-        Computes the reward using the CES-type reward function as defined in the LaTeX document.
+        Computes the reward using the CES-type reward function as defined.
         """
         # Extract the current state
         lines_cleared = new_state['lines_cleared']
@@ -582,6 +592,42 @@ class Matris(object):
 
         return height_diff
 
+    def get_state_features(self):
+        """
+        Extracts features from the current state for the RL agent.
+        Features include:
+        - Column heights
+        - Aggregate height
+        - Number of holes
+        - Bumpiness
+        - Lines cleared
+        """
+        heights = [0] * MATRIX_WIDTH
+        num_holes = 0
+        for x in range(MATRIX_WIDTH):
+            column_filled = False
+            for y in range(MATRIX_HEIGHT):
+                cell = self.matrix[(y, x)]
+                if cell is not None and cell[0] == 'block':
+                    if not column_filled:
+                        heights[x] = MATRIX_HEIGHT - y
+                        column_filled = True
+                elif column_filled:
+                    num_holes += 1
+
+        aggregate_height = sum(heights)
+        bumpiness = sum([abs(heights[i] - heights[i+1]) for i in range(MATRIX_WIDTH - 1)])
+        lines_cleared = self.lines_cleared_last
+
+        features = np.array(heights + [aggregate_height, num_holes, bumpiness, lines_cleared])
+        return features
+
+    def reset(self):
+        """
+        Resets the game state for a new episode.
+        """
+        self.__init__(screen=self.screen, render=self.render)
+
 class Game(object):
     def __init__(self, render=True):
         self.render = render
@@ -619,6 +665,13 @@ class Game(object):
         if self.render:
             pygame.quit()
 
+    def reset(self):
+        """
+        Resets the game for a new episode.
+        """
+        self.matris.reset()
+        self.running = True
+
     def step(self, action_key):
         # Post the action as a pygame event
         pygame.event.post(pygame.event.Event(pygame.KEYDOWN, {'key': action_key}))
@@ -626,13 +679,16 @@ class Game(object):
             if self.matris.update(0.02):
                 if self.render:
                     self.redraw()
+                    pygame.display.flip()  # Ensure the display updates
             done = False
         except GameOver:
             done = True
         # Get the reward from the matris object
         reward = self.matris.reward
         score = self.matris.score
-        return done, reward, score
+        # Get the next state features
+        state = self.matris.get_state_features()
+        return state, reward, done, score
 
     def redraw(self):
         """
