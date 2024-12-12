@@ -142,4 +142,4 @@ def run_training(episodes=1000, render=False):
     torch.save(agent.policy_net.state_dict(), "tetris_dqn.pth")
 
 if __name__ == '__main__':
-    run_training(episodes=1000, render=False)
+    run_training(episodes=1000, render=True)
