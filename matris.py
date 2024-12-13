@@ -14,7 +14,8 @@ class GameOver(Exception):
     """Exception used for its control flow properties"""
 
 def get_sound(filename):
-    return pygame.mixer.Sound(os.path.join(os.path.dirname(__file__), "resources", filename))
+    return 
+    # return pygame.mixer.Sound(os.path.join(os.path.dirname(__file__), "resources", filename))
 
 BGCOLOR = (15, 15, 20)
 BORDERCOLOR = (140, 140, 140)
@@ -132,7 +133,7 @@ class Matris(object):
         while self.request_movement('down'):
             continue  # Simply move the piece down without incrementing the score
 
-        self.lock_tetromino()
+        return self.lock_tetromino()
 
     def update(self, timepassed):
         """
@@ -337,6 +338,41 @@ class Matris(object):
 
         return border
 
+    def copy(self):
+        '''Create a copy of the current game state.'''
+        new_game = Matris(screen=self.screen, render=False)
+        new_game.matrix = self.matrix.copy()
+        new_game.next_tetromino = self.next_tetromino
+        new_game.current_tetromino = self.current_tetromino
+        new_game.tetromino_position = self.tetromino_position
+        new_game.tetromino_rotation = self.tetromino_rotation
+        new_game.lines = self.lines
+        new_game.score = self.score
+        new_game.level = self.level
+        return new_game
+        # new_game = Matris(screen=self.screen, render=False)
+        # new_game.matrix = self.matrix.copy()
+        # new_game.next_tetromino = self.next_tetromino
+        # new_game.current_tetromino = self.current_tetromino
+        # new_game.tetromino_position = self.tetromino_position
+        # new_game.tetromino_rotation = self.tetromino_rotation
+        # new_game.lines = self.lines
+        # new_game.score = self.score
+        # new_game.level = self.level
+        
+        # # **Copy the tetromino_block and shadow_block**
+        # new_game.tetromino_block = self.tetromino_block.copy()
+        # new_game.shadow_block = self.shadow_block.copy()
+        
+        # # Also copy other necessary attributes if any
+        # new_game.hold_tetromino = self.hold_tetromino
+        # new_game.hold_used = self.hold_used
+        # new_game.surface_of_next_tetromino = self.surface_of_next_tetromino.copy() if self.surface_of_next_tetromino else None
+        # new_game.surface_of_hold_tetromino = self.surface_of_hold_tetromino.copy() if self.surface_of_hold_tetromino else None
+        
+        return new_game
+
+
     def lock_tetromino(self):
         """
         This method is called whenever the falling tetromino "dies". `self.matrix` is updated,
@@ -359,7 +395,7 @@ class Matris(object):
         if blended_matrix:
             self.matrix = blended_matrix
         else:
-            self.gameover_sound.play()
+            # self.gameover_sound.play()
             self.gameover()
 
         # Remove lines and update lines count
@@ -368,19 +404,19 @@ class Matris(object):
 
         # Implement scoring as before
         if lines_cleared:
-            if lines_cleared >= 4:
-                self.linescleared_sound.play()
+            # if lines_cleared >= 4:
+            #     self.linescleared_sound.play()
             self.score += 100 * (lines_cleared ** 2) * self.combo
 
             # Check and play high score related sounds
             if not self.played_highscorebeaten_sound and self.score > self.highscore:
-                if self.highscore != 0:
-                    self.highscorebeaten_sound.play()
+                # if self.highscore != 0:
+                #     self.highscorebeaten_sound.play()
                 self.played_highscorebeaten_sound = True
 
         # Level up logic
         if self.lines >= self.level * 10:
-            self.levelup_sound.play()
+            # self.levelup_sound.play()
             self.level += 1
 
         # Combo logic remains the same
@@ -410,10 +446,12 @@ class Matris(object):
             self.total_rewards += game_over_penalty
             self.num_updates += 1
             self.update_average_reward()
-            self.gameover_sound.play()
+            # self.gameover_sound.play()
             self.gameover()
 
         self.needs_redraw = True
+
+        return self.reward
 
     def update_average_reward(self):
         # Update the average reward and its rate of change
@@ -515,79 +553,56 @@ class Matris(object):
         position = (posY - 1, posX)
         return self.blend(position=position, shadow=True)
 
-    # def compute_reward(self, old_state, new_state):
-    #     lines_cleared = new_state['lines_cleared']
-    #     holes_after = self.count_holes()
-    #     heights = self.get_column_heights()
-    #     max_height = max(heights)  # Maximum stack height
-
-    #     # Define reward constants
-    #     line_clear_reward = 100   # Basic reward for clearing each line
-    #     tetris_bonus = 800        # Large bonus for clearing four lines at once
-    #     hole_penalty = -50        # Penalty for each hole created
-    #     height_penalty = -100      # Penalty for increased stack height, to encourage low plays
-    #     score_fraction = 100     # Fraction of the game score to include in the reward
-
-    #     # Calculate dynamic rewards
-    #     reward = (line_clear_reward * lines_cleared +
-    #             tetris_bonus * (1 if lines_cleared == 4 else 0) +  # Apply Tetris bonus only for 4 lines
-    #             hole_penalty * holes_after +
-    #             height_penalty * max_height +
-    #             score_fraction * self.score)  # Include a fraction of the score in the reward
-
-    #     # Normalize the reward by the number of blocks played to avoid rewarding just longer play
-    #     reward /= (self.num_blocks_played if self.num_blocks_played > 0 else 1)
-
-    #     return reward
-
     def compute_reward(self, old_state, new_state):
-        lines_cleared = new_state['lines_cleared']
+        """
+        Compute the reward for transitioning from old_state to new_state.
+        Heavily prioritize filled lower rows and lines cleared,
+        while punishing height and game over conditions.
+        """
+        # Extract features from the current state
+        lines_cleared = new_state['lines_cleared'] - old_state['lines']
+        height = self.get_column_heights()
+
+        # reward = lines_cleared+100 + 10*sum(height) - 10*max(height) - 10*self.count_holes()
         holes_after = self.count_holes()
         heights = self.get_column_heights()
-        # n_10_fills: number of filled cells in the 10th column (index 9 since zero-based)
-        n_10_fills = self.count_fills_in_column(9)
+        max_height = max(heights)
+        aggregate_height = sum(heights)
+        bumpiness = sum(abs(heights[i] - heights[i + 1]) for i in range(len(heights) - 1))
 
-        # *** NEW CODE STARTS HERE ***
-        # Define the CES-based reward parameters (scaling constants)
-        alpha = 1.0  # Adjust as needed
-        beta = 1.0   # Adjust as needed
-        gamma = 10.0  # Adjust as needed
-        delta = 25  # Adjust as needed
-        rho = 0.9    # Elasticity parameter, adjust as needed
+        # Reward for lines cleared, weighted more for multiple lines at once
+        line_clear_reward = lines_cleared ** 2 * 100  # Exponential reward for clearing lines
 
-        tetris_bonus = 800 
+        # Bonus for filling lower rows, prioritizing deeper lines
+        filled_lower_rows_reward = sum(
+            (MATRIX_HEIGHT - y) ** 2  # Heavily weight rows closer to the bottom
+            for y in range(MATRIX_HEIGHT)
+            if all(self.matrix[(y, x)] is not None for x in range(MATRIX_WIDTH))
+        )
 
-        # According to the given formula:
-        # R_t = (α * (100 * (lines_cleared)^2)^ρ) - β * (n_holes) - γ * (n_10_fills) 
-        #       + δ * ( Σ_{i=1 to 9} ( (height_i - height_{i+1} ≥ 0 && height_i - height_{i+1} ≤ 2) ? 1 : -1 ) )
-        #
-        # Note: In zero-based indexing, columns are heights[0] ... heights[9].
-        # i=1 to 9 translates to i=0 to 8 in zero-based indexing for Python.
-        bump_sum = 0
-        for i in range(9):
-            diff = heights[i] - heights[i+1]
-            if diff >= 0 and diff <= 2:
-                bump_sum += 1
-            else:
-                bump_sum -= 1
+        # Penalties
+        hole_penalty = -3 * holes_after  # Strong penalty for holes
+        height_penalty = -5 * max_height  # Heavily penalize tall stacks
+        bumpiness_penalty = -1 * bumpiness  # Penalize uneven column heights
 
-        # Compute the CES-like term for lines cleared
-        # lines_cleared term: (100 * (lines_cleared)^2)
-        # Then raised to the power ρ
-        line_term = (100 * lines_cleared + tetris_bonus * (1 if lines_cleared == 4 else 0))
-        
-        # print((alpha * line_term), (beta * holes_after), (gamma * n_10_fills), (delta * bump_sum))
 
-        # Combine all into the reward function
-        reward = (alpha * line_term) - (beta * holes_after) - (gamma * n_10_fills) + (delta * bump_sum)
-        # *** NEW CODE ENDS HERE ***
+        # Combine rewards and penalties
+        reward = (
+            line_clear_reward
+            + filled_lower_rows_reward
+            + hole_penalty
+            + height_penalty
+            + bumpiness_penalty
+        )
+        print(reward)
 
-        # Optional: If you still want to normalize or incorporate other adjustments, do so here.
-        # For instance, we can divide by num_blocks_played to avoid overly large rewards.
-        if self.num_blocks_played > 0:
-            reward /= self.num_blocks_played
+        # Game-over penalty
+        if not self.blend():  # If the game ends
+            reward-= -5000  # Heavily penalize game over
 
         return reward
+
+
 
 
 
@@ -610,46 +625,18 @@ class Matris(object):
             reward += (max_contiguity ** 2) * row_weight
         return reward
 
-    # def count_holes(self):
-    #     """
-    #     Count the number of 'holes' in the stack. A hole is defined as an empty space below at least one block.
-    #     """
-    #     holes = 0
-    #     for x in range(MATRIX_WIDTH):
-    #         block_found = False
-    #         for y in range(MATRIX_HEIGHT):
-    #             if self.matrix[(y, x)] is not None:
-    #                 block_found = True
-    #             elif block_found:
-    #                 holes += 1
-    #     return holes
     def count_holes(self):
-        width = MATRIX_WIDTH
-        height = MATRIX_HEIGHT
-        
-        # Create a 2D array indicating which cells are filled/empty
-        empty_grid = [[self.matrix[(y, x)] is None for x in range(width)] for y in range(height)]
-        reachable = [[False]*width for _ in range(height)]
-
-        # Mark top row empty cells as reachable
-        for x in range(width):
-            if empty_grid[0][x]:
-                reachable[0][x] = True
-
-        # Propagate reachability downwards
-        for y in range(height - 1):
-            for x in range(width):
-                if reachable[y][x] and empty_grid[y+1][x]:
-                    # If the cell below is empty, it's reachable
-                    reachable[y+1][x] = True
-
-        # Count holes as empty cells that are not reachable
+        """
+        Count the number of 'holes' in the stack. A hole is defined as an empty space below at least one block.
+        """
         holes = 0
-        for y in range(height):
-            for x in range(width):
-                if empty_grid[y][x] and not reachable[y][x]:
+        for x in range(MATRIX_WIDTH):
+            block_found = False
+            for y in range(MATRIX_HEIGHT):
+                if self.matrix[(y, x)] is not None:
+                    block_found = True
+                elif block_found:
                     holes += 1
-
         return holes
 
     def get_column_heights(self):
