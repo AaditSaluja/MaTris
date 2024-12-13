@@ -337,6 +337,19 @@ class Matris(object):
 
         return border
 
+    def copy(self):
+        '''Create a copy of the current game state.'''
+        new_game = Matris(screen=self.screen, render=False)
+        new_game.matrix = self.matrix.copy()
+        new_game.next_tetromino = self.next_tetromino
+        new_game.current_tetromino = self.current_tetromino
+        new_game.tetromino_position = self.tetromino_position
+        new_game.tetromino_rotation = self.tetromino_rotation
+        new_game.lines = self.lines
+        new_game.score = self.score
+        new_game.level = self.level
+        return new_game
+
     def lock_tetromino(self):
         """
         This method is called whenever the falling tetromino "dies". `self.matrix` is updated,
@@ -405,6 +418,11 @@ class Matris(object):
 
         # Game over check after setting new tetromino
         if not self.blend():
+            game_over_penalty = -max(0, 1000 - 0.0001*self.num_updates)  
+            self.reward += game_over_penalty
+            self.total_rewards += game_over_penalty
+            self.num_updates += 1
+            self.update_average_reward()
             self.gameover_sound.play()
             self.gameover()
 
@@ -511,29 +529,52 @@ class Matris(object):
         return self.blend(position=position, shadow=True)
 
     def compute_reward(self, old_state, new_state):
-        lines_cleared = new_state['lines_cleared']
+        """
+        Compute the reward for transitioning from old_state to new_state.
+        Heavily prioritize filled lower rows and lines cleared,
+        while punishing height and game over conditions.
+        """
+        # Extract features from the current state
+        lines_cleared = new_state['lines_cleared'] - old_state['lines']
         holes_after = self.count_holes()
         heights = self.get_column_heights()
-        max_height = max(heights)  # Maximum stack height
+        max_height = max(heights)
+        aggregate_height = sum(heights)
+        bumpiness = sum(abs(heights[i] - heights[i + 1]) for i in range(len(heights) - 1))
 
-        # Define reward constants
-        line_clear_reward = 100   # Basic reward for clearing each line
-        tetris_bonus = 800        # Large bonus for clearing four lines at once
-        hole_penalty = -50        # Penalty for each hole created
-        height_penalty = -10      # Penalty for increased stack height, to encourage low plays
-        score_fraction = 100     # Fraction of the game score to include in the reward
+        # Reward for lines cleared, weighted more for multiple lines at once
+        line_clear_reward = lines_cleared ** 2 * 100  # Exponential reward for clearing lines
 
-        # Calculate dynamic rewards
-        reward = (line_clear_reward * lines_cleared +
-                tetris_bonus * (1 if lines_cleared == 4 else 0) +  # Apply Tetris bonus only for 4 lines
-                hole_penalty * holes_after +
-                height_penalty * max_height +
-                score_fraction * self.score)  # Include a fraction of the score in the reward
+        # Bonus for filling lower rows, prioritizing deeper lines
+        filled_lower_rows_reward = sum(
+            (MATRIX_HEIGHT - y) ** 2  # Heavily weight rows closer to the bottom
+            for y in range(MATRIX_HEIGHT)
+            if all(self.matrix[(y, x)] is not None for x in range(MATRIX_WIDTH))
+        )
 
-        # Normalize the reward by the number of blocks played to avoid rewarding just longer play
-        reward /= (self.num_blocks_played if self.num_blocks_played > 0 else 1)
+        # Penalties
+        hole_penalty = -3 * holes_after  # Strong penalty for holes
+        height_penalty = -5 * max_height  # Heavily penalize tall stacks
+        bumpiness_penalty = -1 * bumpiness  # Penalize uneven column heights
+
+
+        # Combine rewards and penalties
+        reward = (
+            line_clear_reward
+            + filled_lower_rows_reward
+            + hole_penalty
+            + height_penalty
+            + bumpiness_penalty
+        )
+
+        # Game-over penalty
+        if not self.blend():  # If the game ends
+            reward-= -5000  # Heavily penalize game over
 
         return reward
+
+
+
 
 
     def compute_contiguity_reward(self):
